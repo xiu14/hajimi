@@ -66,6 +66,9 @@ class ApiStatsManager:
         self._save_counter = 0
         self._last_save_time = time.time()
         
+        # 用于比较统计数据变化的变量
+        self._last_stats = {"day_count": 0, "total_calls": 0, "total_tokens": 0}
+        
         if enable_background:
             self._start_worker()
     
@@ -171,6 +174,9 @@ class ApiStatsManager:
             # 确保数据目录存在
             os.makedirs(os.path.dirname(self._daily_stats_file), exist_ok=True)
             
+            data_changed = False
+            calls_add = 0
+            tokens_add = 0
             with self._daily_stats_lock:
                 # 将当前内存中的数据合并到永久存储
                 today = datetime.now().strftime("%Y-%m-%d")
@@ -179,20 +185,25 @@ class ApiStatsManager:
                         self.permanent_daily_stats[today] = {"calls": 0, "tokens": 0}
                     
                     # 将今天的临时数据添加到永久数据
-                    self.permanent_daily_stats[today]["calls"] += self.daily_stats[today]["calls"]
-                    self.permanent_daily_stats[today]["tokens"] += self.daily_stats[today]["tokens"]
+                    calls_add = self.daily_stats[today]["calls"]
+                    tokens_add = self.daily_stats[today]["tokens"]
                     
-                    # 记录日志，便于调试
-                    log('info', f"每日统计更新: 日期={today}, 调用数增加={self.daily_stats[today]['calls']}, Token数增加={self.daily_stats[today]['tokens']}")
+                    # 只有有实际变更才保存、清空和记录日志
+                    if calls_add > 0 or tokens_add > 0:
+                        data_changed = True
+                        self.permanent_daily_stats[today]["calls"] += calls_add
+                        self.permanent_daily_stats[today]["tokens"] += tokens_add
+                        
+                        # 清空当天的临时数据
+                        self.daily_stats[today] = {"calls": 0, "tokens": 0}
+                
+                # 保存到文件（只在有数据变更或强制保存时）
+                if data_changed:
+                    with open(self._daily_stats_file, 'w', encoding='utf-8') as f:
+                        json.dump(self.permanent_daily_stats, f, ensure_ascii=False, indent=2)
                     
-                    # 清空当天的临时数据
-                    self.daily_stats[today] = {"calls": 0, "tokens": 0}
-                
-                # 保存到文件
-                with open(self._daily_stats_file, 'w', encoding='utf-8') as f:
-                    json.dump(self.permanent_daily_stats, f, ensure_ascii=False, indent=2)
-                
-                log('info', f"每日统计数据已保存: {len(self.permanent_daily_stats)}天")
+                    # 合并为一条日志
+                    log('info', f"每日统计已更新并保存: 日期={today}, 调用+{calls_add}, Token+{tokens_add}, 总计{len(self.permanent_daily_stats)}天")
         except Exception as e:
             log('error', f"保存每日统计数据失败: {str(e)}")
             # 尝试修复问题
@@ -260,7 +271,7 @@ class ApiStatsManager:
             self.daily_stats[today]["calls"] += 1
             self.daily_stats[today]["tokens"] += tokens
             
-            # 记录日志，便于调试
+            # 只在debug级别记录日志
             daily_calls = self.daily_stats[today]["calls"]
             daily_tokens = self.daily_stats[today]["tokens"]
             log('debug', f"已更新今日统计: 日期={today}, 当前调用数={daily_calls}, 当前Token数={daily_tokens}")
@@ -277,9 +288,9 @@ class ApiStatsManager:
             # 在后台线程中执行保存，避免阻塞主线程
             self._save_daily_stats_async()
         
-        # 记录日志
+        # 记录详细日志，但只在debug级别
         log_message = f"API调用已记录: 秘钥 '{api_key[:8]}', 模型 '{model}', 令牌: {tokens if tokens is not None else 0}"
-        log('info', log_message)
+        log('debug', log_message)
     
     async def cleanup(self):
         """清理超过24小时的时间桶数据"""
@@ -421,12 +432,11 @@ class ApiStatsManager:
         if not local_copy:
             today = now.strftime("%Y-%m-%d")
             local_copy[today] = {"calls": 0, "tokens": 0}
-            log('info', "没有历史数据，添加今天的空数据")
         
         # 获取所有有数据的日期（如果没有数据，也包括今天）
         data_dates = sorted(local_copy.keys(), reverse=True)
         
-        # 只返回最近15天的日期
+        # 只返回最近指定天数的日期
         recent_dates = []
         for date in data_dates:
             date_obj = datetime.strptime(date, "%Y-%m-%d")
@@ -436,18 +446,25 @@ class ApiStatsManager:
                 break
         
         # 构建返回数据
+        total_calls = 0
+        total_tokens = 0
         for date in recent_dates:
             stats.append({
                 "date": date,
                 "calls": local_copy[date]["calls"],
                 "tokens": local_copy[date]["tokens"]
             })
+            total_calls += local_copy[date]["calls"]
+            total_tokens += local_copy[date]["tokens"]
         
-        # 记录日志
-        if stats:
-            log('info', f"获取每日统计数据: {len(stats)}天的数据")
-        else:
-            log('warning', "没有找到任何历史统计数据")
+        # 检查数据是否有变化，仅当有API调用时才记录日志
+        current_stats = {"day_count": len(stats), "total_calls": total_calls, "total_tokens": total_tokens}
+        data_changed = (current_stats != self._last_stats)
+        self._last_stats = current_stats
+        
+        # 只在数据有变化且有实际调用时才记录info级别日志
+        if data_changed and total_calls > 0:
+            log('info', f"获取每日统计数据: {len(stats)}天, 总调用: {total_calls}, 总Token: {total_tokens}")
         
         return stats
     

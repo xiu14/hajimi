@@ -583,13 +583,9 @@ async def get_daily_stats():
                     "tokens": today_memory_stats["tokens"]
                 })
         
-        # 记录获取的数据，便于调试
-        if daily_stats:
-            total_calls = sum(stat["calls"] for stat in daily_stats)
-            total_tokens = sum(stat["tokens"] for stat in daily_stats)
-            log('info', f"获取每日统计数据: {len(daily_stats)}天, 总调用: {total_calls}, 总Token: {total_tokens}")
-        else:
-            log('warning', "获取每日统计数据: 未找到任何统计数据")
+        # 错误情况下才记录日志
+        if not daily_stats:
+            log('debug', "获取每日统计数据: 未找到任何统计数据")
         
         return {
             "daily_stats": daily_stats
