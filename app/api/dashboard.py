@@ -602,18 +602,11 @@ async def get_daily_stats():
         if not daily_stats:
             log('debug', "获取每日统计数据: 未找到任何统计数据")
         
-        # 在返回的daily_stats列表末尾添加一个总计行，使用特殊的date值"总计"
-        # 这样前端不需要修改代码，可以直接渲染这个总计行
-        daily_stats.append({
-            "date": "总计",
-            "calls": total_calls,
-            "tokens": total_tokens
-        })
-        
+        # 不再添加总计行，改为在元数据中提供全局总计
         return {
             "daily_stats": daily_stats,
             "total_stats": {
-                "total_calls": total_calls,
+                "total_calls": total_calls, 
                 "total_tokens": total_tokens
             }
         }
