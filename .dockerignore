@@ -23,4 +23,7 @@ ENV/
 # 排除非必要文件
 *.log
 *.swp
-*.DS_Store 
+*.DS_Store
+
+node_modules
+**/node_modules 
