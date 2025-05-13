@@ -583,18 +583,41 @@ async def get_daily_stats():
                     "tokens": today_memory_stats["tokens"]
                 })
         
+        # 计算所有记录的总调用次数和总Token数
+        total_calls = 0
+        total_tokens = 0
+        
+        # 使用锁安全地访问所有永久存储的数据
+        with api_stats_manager._daily_stats_lock:
+            for date, stats in api_stats_manager.permanent_daily_stats.items():
+                total_calls += stats["calls"]
+                total_tokens += stats["tokens"]
+            
+            # 添加当天内存中的数据
+            if today in api_stats_manager.daily_stats:
+                total_calls += api_stats_manager.daily_stats[today]["calls"]
+                total_tokens += api_stats_manager.daily_stats[today]["tokens"]
+        
         # 错误情况下才记录日志
         if not daily_stats:
             log('debug', "获取每日统计数据: 未找到任何统计数据")
         
         return {
-            "daily_stats": daily_stats
+            "daily_stats": daily_stats,
+            "total_stats": {
+                "total_calls": total_calls,
+                "total_tokens": total_tokens
+            }
         }
     except Exception as e:
         log('error', f"获取每日统计数据时出错: {str(e)}")
         # 即使出错也返回空数组而不是抛出异常，确保前端不会崩溃
         return {
             "daily_stats": [],
+            "total_stats": {
+                "total_calls": 0,
+                "total_tokens": 0
+            },
             "error": str(e)
         }
 
