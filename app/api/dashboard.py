@@ -554,8 +554,8 @@ async def get_daily_stats():
         # 触发一次保存以确保数据持久化
         api_stats_manager._save_daily_stats()
         
-        # 获取持久化的每日统计数据
-        daily_stats = api_stats_manager.get_daily_stats(15)
+        # 获取持久化的每日统计数据 - 修改为仅获取5天数据
+        daily_stats = api_stats_manager.get_daily_stats(5)
         
         # 获取当前内存中的数据并合并
         today = datetime.now().strftime("%Y-%m-%d")
