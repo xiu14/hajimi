@@ -303,11 +303,11 @@ class ApiStatsManager:
                 if ts < day_ago_ts:
                     del self.time_buckets[ts]
         
-        # 清理90天前的每日统计数据
+        # 清理360天前的每日统计数据，从90天改为360天
         with self._daily_stats_lock:
-            days_90_ago = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+            days_360_ago = (now - timedelta(days=360)).strftime("%Y-%m-%d")
             for date in list(self.permanent_daily_stats.keys()):
-                if date < days_90_ago:
+                if date < days_360_ago:
                     del self.permanent_daily_stats[date]
             
             # 在后台保存清理后的数据
